@@ -5,9 +5,11 @@ import requests
 import re
 
 # =============== CONFIG ===============
-BOT_TOKEN = "8389825734:AAG_x1JNp67gk0LD5XDqkT77v8LObEvmxdI"
-INCOMING_CHANNEL_ID = -1003718086927
-OUTGOING_CHANNEL_ID = -1003624908511
+import os
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+INCOMING_CHANNEL_ID = int(os.getenv("INCOMING_CHANNEL_ID"))
+OUTGOING_CHANNEL_ID = int(os.getenv("OUTGOING_CHANNEL_ID"))
 
 COOLDOWN_TIME = 1800  # 30 minutes
 
