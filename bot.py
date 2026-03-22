@@ -121,11 +121,14 @@ def is_valid(symbol, entry, tps, sl, side):
     if price is None:
         return False
 
+    # 🔥 RELAXED VALIDATION
+    # only reject if SL already hit badly
+
     if side == "LONG":
-        if price >= tps[0] or price <= sl:
+        if price <= sl:
             return False
     else:
-        if price <= tps[0] or price >= sl:
+        if price >= sl:
             return False
 
     return True
