@@ -107,33 +107,34 @@ def parse_signal(text):
 
         print(f"✅ SL: {sl}")
         
-        # ========= TARGETS =========
+# ========= TARGETS =========
         tps = []
 
-# 🔥 SUPPORT TARGET + TAKE PROFIT BOTH
-target_section = ""
-m = re.search(
-    r"(TAKE\s*PROFITS?|TARGETS?)\s*:?(.*?)(STOP|SL|LEVERAGE|$)",
-    text,
-    re.DOTALL
-)
+        # SUPPORT TARGET + TAKE PROFIT BOTH
+        target_section = ""
 
-if m:
-    target_section = m.group(2)
+        m = re.search(
+            r"(TAKE\s*PROFITS?|TARGETS?)\s*:?(.*?)(STOP|SL|LEVERAGE|$)",
+            text,
+            re.DOTALL
+        )
 
-# 1️⃣ numbered targets (1) 2)
-tps += re.findall(r"\)\s*(\d+\.\d+)", target_section)
+        if m:
+            target_section = m.group(2)
 
-# 2️⃣ dash style (- 0.123)
-if len(tps) == 0:
-    tps += re.findall(r'[\-–—]\s*(\d+\.\d+)', target_section)
+        # 1️⃣ numbered targets (1) 2)
+        tps += re.findall(r"\)\s*(\d+\.\d+)", target_section)
 
-# 3️⃣ plain numbers (your issue fix)
-if len(tps) == 0:
-    tps += re.findall(r"\d+\.\d+", target_section)
+        # 2️⃣ dash style (- 0.123)
+        if len(tps) == 0:
+            tps += re.findall(r'[\-–—]\s*(\d+\.\d+)', target_section)
 
-# remove duplicates
-tps = list(dict.fromkeys([float(x) for x in tps]))
+        # 3️⃣ plain numbers
+        if len(tps) == 0:
+            tps += re.findall(r"\d+\.\d+", target_section)
+
+        # remove duplicates
+        tps = list(dict.fromkeys([float(x) for x in tps]))
         # filter direction
         if side == "LONG":
             tps = [tp for tp in tps if tp > entry]
