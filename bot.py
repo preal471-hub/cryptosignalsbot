@@ -106,9 +106,9 @@ def parse_signal(text):
             return None
 
         print(f"✅ SL: {sl}")
-
-# ========= TARGETS =========
-tps = []
+        
+        # ========= TARGETS =========
+        tps = []
 
 # 🔥 SUPPORT TARGET + TAKE PROFIT BOTH
 target_section = ""
