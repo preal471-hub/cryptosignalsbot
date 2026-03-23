@@ -3,137 +3,170 @@ import time
 import threading
 import requests
 import re
-
-# =============== CONFIG ===============
 import os
 
+# =============== CONFIG ===============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 INCOMING_CHANNEL_ID = int(os.getenv("INCOMING_CHANNEL_ID"))
 OUTGOING_CHANNEL_ID = int(os.getenv("OUTGOING_CHANNEL_ID"))
 
-COOLDOWN_TIME = 1800  # 30 minutes
+COOLDOWN_TIME = 0  # 🔥 DISABLED
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# =============== GLOBAL STORAGE ===============
 closed_signals = set()
 last_signal_time = 0
 
-# =============== BINANCE PRICE ===============
+# =============== PRICE FETCH ===============
 def get_price(symbol):
     try:
         url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
         data = requests.get(url, timeout=5).json()
         return float(data['price'])
     except:
+        print("❌ PRICE FETCH ERROR")
         return None
 
-# =============== UNIVERSAL PARSER ===============
+# =============== PARSER ===============
 def parse_signal(text):
     try:
+        original_text = text
         text = text.upper()
 
-        # SYMBOL
+        print("\n==============================")
+        print("📩 NEW MESSAGE")
+        print(original_text)
+        print("==============================")
+
+        # ========= SYMBOL =========
         symbol = None
-        m = re.search(r"#?([A-Z]{2,10})[/ ]?USDT", text)
+
+        m = re.search(r"#?([A-Z]{2,15})\s*/\s*USDT", text)
         if m:
             symbol = m.group(1)
 
         if not symbol:
-            m = re.search(r"\b(XAUUSD|BTCUSD|ETHUSD)\b", text)
+            m = re.search(r"\b([A-Z]{2,15})USDT\b", text)
             if m:
                 symbol = m.group(1)
 
         if not symbol:
+            m = re.search(r"PAIR[: ]+([A-Z]{2,15})/USDT", text)
+            if m:
+                symbol = m.group(1)
+
+        if not symbol:
+            print("❌ FAILED: SYMBOL")
             return None
 
-        # SIDE
+        print(f"✅ SYMBOL: {symbol}")
+
+        # ========= SIDE =========
         side = "LONG"
         if "SHORT" in text or "SELL" in text:
             side = "SHORT"
 
-        # ENTRY
+        print(f"✅ SIDE: {side}")
+
+        # ========= ENTRY =========
         entry = None
 
-        m = re.search(r"(ENTRY|ENTRY ZONE|ENTRY TARGET)[^\d]*(\d+\.?\d*)\s*[-–]\s*(\d+\.?\d*)", text)
+        # range
+        m = re.search(r"ENTRY[^\d]*(\d+\.?\d*)\s*[-–]\s*(\d+\.?\d*)", text)
         if m:
-            entry = float(m.group(2))
+            entry = float(m.group(1))
 
+        # single
         if not entry:
-            m = re.search(r"(ENTRY|BUY ABOVE|SHORT BELOW)[^\d]*(\d+\.?\d*)", text)
+            m = re.search(r"ENTRY[^\d]*(\d+\.?\d*)", text)
             if m:
-                entry = float(m.group(2))
+                entry = float(m.group(1))
 
+        # numbered
         if not entry:
-            nums = re.findall(r"\)\s*(\d+\.?\d*)", text)
+            nums = re.findall(r"\)\s*(\d+\.\d+)", text)
             if nums:
                 entry = float(nums[0])
 
         if not entry:
+            print("❌ FAILED: ENTRY")
             return None
 
-        # SL
+        print(f"✅ ENTRY: {entry}")
+
+        # ========= SL =========
         sl = None
-        m = re.search(r"(SL|STOP ?LOSS)[^\d]*(\d+\.?\d*)", text)
+
+        m = re.search(r"(SL|STOP LOSS|STOP)[^\d]*(\d+\.?\d*)", text)
         if m:
             sl = float(m.group(2))
 
         if not sl:
+            print("❌ FAILED: SL")
             return None
 
-        # TARGETS
+        print(f"✅ SL: {sl}")
+
+        # ========= TARGETS =========
         tps = []
 
-        tps += re.findall(r"TP\d[: ]*(\d+\.?\d*)", text)
-        tps += re.findall(r"\d+\)\s*(\d+\.?\d*)", text)
-        tps += re.findall(r"(\d+\.?\d*)\s*-\s*(\d+\.?\d*)", text)
+        # TP1 format
+        tps += re.findall(r"TP\d[^\d]*(\d+\.?\d*)", text)
 
-        if len(tps) < 2:
-            nums = re.findall(r"\d+\.\d+", text)
-            for num in nums:
-                if abs(float(num) - entry) < 1e-6:
-                    continue
-                if abs(float(num) - sl) < 1e-6:
-                    continue
+        # numbered targets
+        tps += re.findall(r"\d+\)\s*(\d+\.\d+)", text)
+
+        # plain numbers
+        nums = re.findall(r"\d+\.\d+", text)
+
+        for num in nums:
+            f = float(num)
+            if f != entry and f != sl:
                 tps.append(num)
 
-        flat = []
-        for tp in tps:
-            if isinstance(tp, tuple):
-                flat.extend(tp)
-            else:
-                flat.append(tp)
+        # clean duplicates
+        tps = list(dict.fromkeys([float(x) for x in tps]))
 
-        tps = list(dict.fromkeys([float(x) for x in flat]))
-        tps = [tp for tp in tps if tp != entry and tp != sl][:6]
+        # filter direction
+        if side == "LONG":
+            tps = [tp for tp in tps if tp > entry]
+        else:
+            tps = [tp for tp in tps if tp < entry]
+
+        tps = tps[:6]
 
         if len(tps) == 0:
+            print("❌ FAILED: TP")
             return None
+
+        print(f"✅ TPS: {tps}")
 
         return symbol, entry, sl, tps, side
 
-    except:
+    except Exception as e:
+        print(f"❌ PARSE ERROR: {str(e)}")
         return None
 
 # =============== VALIDATION ===============
 def is_valid(symbol, entry, tps, sl, side):
     price = get_price(symbol + "USDT")
+
     if price is None:
         return False
 
-    # 🔥 RELAXED VALIDATION
-    # only reject if SL already hit badly
+    print(f"📊 LIVE PRICE: {price}")
 
-    if side == "LONG":
-        if price <= sl:
-            return False
-    else:
-        if price >= sl:
-            return False
+    if side == "LONG" and price <= sl:
+        print("❌ SL HIT ALREADY (LONG)")
+        return False
+
+    if side == "SHORT" and price >= sl:
+        print("❌ SL HIT ALREADY (SHORT)")
+        return False
 
     return True
 
-# =============== FORMAT SIGNAL ===============
+# =============== FORMAT ===============
 def format_signal(symbol, entry, sl, targets, side):
     nums = ['①','②','③','④','⑤','⑥']
 
@@ -157,29 +190,25 @@ def format_signal(symbol, entry, sl, targets, side):
 def send_tp(symbol, hit, profit, msg_id):
     msg = f"""🚀 MASSIVE PROFITS 🚀  
 
-#{symbol} Moving As Expected 🔥  
+#{symbol} Running 🔥  
 
-{round(profit,2)}%+ Profit Running 📈  
+{round(profit,2)}%+ Profit 📈  
 
-💰 TP{hit} HIT ✅  
-
-Stay Tuned For More Targets 💎"""
+💰 TP{hit} HIT ✅"""
 
     bot.send_message(OUTGOING_CHANNEL_ID, msg, reply_to_message_id=msg_id)
 
 # =============== SL MESSAGE ===============
 def send_sl(symbol, msg_id):
-    msg = f"""⚠️ TRADE UPDATE ⚠️  
+    msg = f"""⚠️ TRADE CLOSED ⚠️  
 
 #{symbol}  
 
-🛑 SL HIT  
-
-Stay Focused — Next Signal Soon 🔥"""
+🛑 SL HIT"""
 
     bot.send_message(OUTGOING_CHANNEL_ID, msg, reply_to_message_id=msg_id)
 
-# =============== TRACK TRADE ===============
+# =============== TRACK ===============
 def track_trade(symbol, entry, tps, sl, side, out_msg_id, incoming_msg_id):
 
     hit = 0
@@ -221,17 +250,16 @@ def track_trade(symbol, entry, tps, sl, side, out_msg_id, incoming_msg_id):
 
         time.sleep(5)
 
-# =============== CLOSE COMMAND ===============
+# =============== CLOSE ===============
 @bot.channel_post_handler(func=lambda m: m.text and "/close" in m.text.lower())
 def close_signal(message):
-
     if message.chat.id != INCOMING_CHANNEL_ID:
         return
 
     if message.reply_to_message:
         closed_signals.add(message.reply_to_message.message_id)
 
-# =============== MAIN HANDLER ===============
+# =============== MAIN ===============
 @bot.channel_post_handler(func=lambda m: True)
 def handle_signal(message):
 
@@ -240,24 +268,19 @@ def handle_signal(message):
     if message.chat.id != INCOMING_CHANNEL_ID:
         return
 
-    # 🚫 COOLDOWN CHECK
-    current_time = time.time()
-    if current_time - last_signal_time < COOLDOWN_TIME:
-        print("⏳ Cooldown active - skipped")
-        return
-
     if message.message_id in closed_signals:
         return
 
     parsed = parse_signal(message.text)
+
     if not parsed:
-        print("❌ Parse failed")
+        print("❌ FINAL RESULT: PARSE FAILED")
         return
 
     symbol, entry, sl, tps, side = parsed
 
     if not is_valid(symbol, entry, tps, sl, side):
-        print("❌ Invalid signal")
+        print("❌ FINAL RESULT: INVALID SIGNAL")
         return
 
     sent = bot.send_message(
@@ -265,12 +288,10 @@ def handle_signal(message):
         format_signal(symbol, entry, sl, tps, side)
     )
 
-    last_signal_time = time.time()
-
     threading.Thread(
         target=track_trade,
         args=(symbol, entry, tps, sl, side, sent.message_id, message.message_id)
     ).start()
 
-# =============== START BOT ===============
+# =============== START ===============
 bot.polling()
