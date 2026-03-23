@@ -295,7 +295,13 @@ def handle_signal(message):
     if message.message_id in closed_signals:
         return
 
-    parsed = parse_signal(message.text)
+# 🔥 HANDLE TEXT + IMAGE CAPTION BOTH
+    text = message.text if message.text else message.caption
+
+    if not text:
+        return
+
+    parsed = parse_signal(text)
 
     if not parsed:
         print("❌ FINAL RESULT: PARSE FAILED")
