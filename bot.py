@@ -71,22 +71,22 @@ def parse_signal(text):
         # ========= ENTRY =========
         entry = None
 
-        # range
-        m = re.search(r"ENTRY[^\d]*(\d+\.?\d*)\s*[-–]\s*(\d+\.?\d*)", text)
+        # RANGE ENTRY
+        m = re.search(r"ENTRY[^\d]*(\d+\.\d+)\s*[-–]\s*(\d+\.\d+)", text)
         if m:
             entry = float(m.group(1))
 
-        # single
-        if not entry:
-            m = re.search(r"ENTRY[^\d]*(\d+\.?\d*)", text)
-            if m:
-                entry = float(m.group(1))
-
-        # numbered
+        # NUMBERED ENTRY (FIXED 🔥)
         if not entry:
             nums = re.findall(r"\)\s*(\d+\.\d+)", text)
             if nums:
                 entry = float(nums[0])
+
+        # SINGLE ENTRY
+        if not entry:
+            m = re.search(r"ENTRY[^\d]*(\d+\.\d+)", text)
+            if m:
+                entry = float(m.group(1))
 
         if not entry:
             print("❌ FAILED: ENTRY")
@@ -97,7 +97,7 @@ def parse_signal(text):
         # ========= SL =========
         sl = None
 
-        m = re.search(r"(SL|STOP LOSS|STOP)[^\d]*(\d+\.?\d*)", text)
+        m = re.search(r"(SL|STOP LOSS|STOP)[^\d]*(\d+\.\d+)", text)
         if m:
             sl = float(m.group(2))
 
@@ -110,21 +110,20 @@ def parse_signal(text):
         # ========= TARGETS =========
         tps = []
 
-        # TP1 format
-        tps += re.findall(r"TP\d[^\d]*(\d+\.?\d*)", text)
+        # ONLY TAKE TARGET SECTION 🔥
+        target_section = ""
+        m = re.search(r"TARGETS?[:\s]*(.*)", text, re.DOTALL)
+        if m:
+            target_section = m.group(1)
 
-        # numbered targets
-        tps += re.findall(r"\d+\)\s*(\d+\.\d+)", text)
+        # numbered TP
+        tps += re.findall(r"\)\s*(\d+\.\d+)", target_section)
 
-        # plain numbers
-        nums = re.findall(r"\d+\.\d+", text)
+        # fallback: decimals in target section only
+        if len(tps) == 0:
+            tps += re.findall(r"\d+\.\d+", target_section)
 
-        for num in nums:
-            f = float(num)
-            if f != entry and f != sl:
-                tps.append(num)
-
-        # clean duplicates
+        # convert
         tps = list(dict.fromkeys([float(x) for x in tps]))
 
         # filter direction
@@ -136,7 +135,7 @@ def parse_signal(text):
         tps = tps[:6]
 
         if len(tps) == 0:
-            print("❌ FAILED: TP")
+            print("❌ FAILED: TP (no valid targets after filtering)")
             return None
 
         print(f"✅ TPS: {tps}")
