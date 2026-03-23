@@ -284,7 +284,7 @@ def close_signal(message):
         closed_signals.add(message.reply_to_message.message_id)
 
 # =============== MAIN ===============
-@bot.channel_post_handler(func=lambda m: True)
+@bot.channel_post_handler(content_types=['text', 'photo'])
 def handle_signal(message):
 
     global last_signal_time
