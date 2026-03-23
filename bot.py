@@ -20,11 +20,27 @@ last_signal_time = 0
 # =============== PRICE FETCH ===============
 def get_price(symbol):
     try:
+        # 🔥 TRY FUTURES FIRST
+        url = f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={symbol}"
+        res = requests.get(url, timeout=5)
+        data = res.json()
+
+        if 'price' in data:
+            return float(data['price'])
+
+        # 🔁 FALLBACK TO SPOT
         url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-        data = requests.get(url, timeout=5).json()
-        return float(data['price'])
-    except:
-        print("❌ PRICE FETCH ERROR")
+        res = requests.get(url, timeout=5)
+        data = res.json()
+
+        if 'price' in data:
+            return float(data['price'])
+
+        print(f"❌ INVALID SYMBOL: {symbol}")
+        return None
+
+    except Exception as e:
+        print(f"❌ PRICE FETCH ERROR: {str(e)}")
         return None
 
 # =============== PARSER ===============
