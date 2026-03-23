@@ -107,25 +107,33 @@ def parse_signal(text):
 
         print(f"✅ SL: {sl}")
 
-        # ========= TARGETS =========
-        tps = []
+# ========= TARGETS =========
+tps = []
 
-        # ONLY TAKE TARGET SECTION 🔥
-        target_section = ""
-        m = re.search(r"TARGETS?[:\s]*(.*)", text, re.DOTALL)
-        if m:
-            target_section = m.group(1)
+# 🔥 SUPPORT TARGET + TAKE PROFIT BOTH
+target_section = ""
+m = re.search(
+    r"(TAKE\s*PROFITS?|TARGETS?)\s*:?(.*?)(STOP|SL|LEVERAGE|$)",
+    text,
+    re.DOTALL
+)
 
-        # numbered TP
-        tps += re.findall(r"\)\s*(\d+\.\d+)", target_section)
+if m:
+    target_section = m.group(2)
 
-        # fallback: decimals in target section only
-        if len(tps) == 0:
-            tps += re.findall(r"\d+\.\d+", target_section)
+# 1️⃣ numbered targets (1) 2)
+tps += re.findall(r"\)\s*(\d+\.\d+)", target_section)
 
-        # convert
-        tps = list(dict.fromkeys([float(x) for x in tps]))
+# 2️⃣ dash style (- 0.123)
+if len(tps) == 0:
+    tps += re.findall(r'[\-–—]\s*(\d+\.\d+)', target_section)
 
+# 3️⃣ plain numbers (your issue fix)
+if len(tps) == 0:
+    tps += re.findall(r"\d+\.\d+", target_section)
+
+# remove duplicates
+tps = list(dict.fromkeys([float(x) for x in tps]))
         # filter direction
         if side == "LONG":
             tps = [tp for tp in tps if tp > entry]
