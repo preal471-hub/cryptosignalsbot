@@ -248,29 +248,35 @@ def track_trade(symbol, entry, tps, sl, side, out_msg_id, incoming_msg_id):
             time.sleep(5)
             continue
 
-        if side == "SHORT":
-            profit = ((entry - price) / entry) * 100 * leverage
+# ================= SHORT =================
+if side == "SHORT":
 
-            if price >= sl and hit == 0:
-                send_sl(symbol, out_msg_id)
-                break
+    if price >= sl and hit == 0:
+        send_sl(symbol, out_msg_id)
+        break
 
-            for i, tp in enumerate(tps):
-                if price <= tp and i >= hit:
-                    hit = i + 1
-                    send_tp(symbol, hit, profit, out_msg_id)
+    for i, tp in enumerate(tps):
+        if price <= tp and i >= hit:
 
-        else:
-            profit = ((price - entry) / entry) * 100 * leverage
+            profit = ((entry - tp) / entry) * 100 * leverage  # ✅ FIX HERE
 
-            if price <= sl and hit == 0:
-                send_sl(symbol, out_msg_id)
-                break
+            hit = i + 1
+            send_tp(symbol, hit, round(profit, 2), out_msg_id)
 
-            for i, tp in enumerate(tps):
-                if price >= tp and i >= hit:
-                    hit = i + 1
-                    send_tp(symbol, hit, profit, out_msg_id)
+# ================= LONG =================
+else:
+
+    if price <= sl and hit == 0:
+        send_sl(symbol, out_msg_id)
+        break
+
+    for i, tp in enumerate(tps):
+        if price >= tp and i >= hit:
+
+            profit = ((tp - entry) / entry) * 100 * leverage  # ✅ FIX HERE
+
+            hit = i + 1
+            send_tp(symbol, hit, round(profit, 2), out_msg_id)
 
         time.sleep(5)
 
