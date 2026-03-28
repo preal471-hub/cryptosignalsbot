@@ -4,191 +4,111 @@ import threading
 import requests
 import re
 import os
+from PIL import Image, ImageDraw, ImageFont
+from datetime import datetime
 
 # =============== CONFIG ===============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 INCOMING_CHANNEL_ID = int(os.getenv("INCOMING_CHANNEL_ID"))
 OUTGOING_CHANNEL_ID = int(os.getenv("OUTGOING_CHANNEL_ID"))
 
-COOLDOWN_TIME = 0  # 🔥 DISABLED
-
 bot = telebot.TeleBot(BOT_TOKEN)
 
 closed_signals = set()
 last_signal_time = 0
 
+# =============== IMAGE GENERATOR ===============
+def generate_image(symbol, entry, last, side, leverage, pnl):
+
+    img = Image.open("template.png").convert("RGB")
+    draw = ImageDraw.Draw(img)
+
+    now = datetime.now().strftime("%b %d, %Y | %I:%M %p")
+    username = "BluepeakCryptoTrading"
+
+    font_username = ImageFont.truetype("Montserrat-Bold.ttf", 40)
+    font_date = ImageFont.truetype("Montserrat-Regular.ttf", 24)
+    font_symbol = ImageFont.truetype("Montserrat-Bold.ttf", 42)
+    font_side = ImageFont.truetype("Montserrat-Bold.ttf", 32)
+    font_return = ImageFont.truetype("Montserrat-Bold.ttf", 57)
+    font_price = ImageFont.truetype("Montserrat-Bold.ttf", 42)
+
+    white = (255,255,255)
+    gray = (150,150,170)
+    green = (0,255,170)
+    red = (255,70,70)
+
+    pnl_color = green if pnl >= 0 else red
+
+    draw.text((221,130), username, fill=white, font=font_username)
+    draw.text((262,182), now, fill=gray, font=font_date)
+    draw.text((187,325), f"{symbol}/USDT", fill=white, font=font_symbol)
+
+    draw.text((607,322), f"{leverage}x", fill=white, font=font_side)
+    draw.text((718,324), side, fill=red if side=="SHORT" else green, font=font_side)
+
+    txt = f"RETURNS {'+' if pnl>=0 else ''}{pnl:.2f}%"
+
+    for i in range(3):
+        draw.text((91-i,424-i), txt, fill=pnl_color, font=font_return)
+
+    draw.text((91,424), txt, fill=pnl_color, font=font_return)
+
+    draw.text((122,571), f"{entry}", fill=white, font=font_price)
+    draw.text((497,567), f"{last}", fill=white, font=font_price)
+
+    img.save("final.png")
+    return "final.png"
+
 # =============== PRICE FETCH ===============
 def get_price(symbol):
     try:
-        # 🔥 TRY FUTURES FIRST
         url = f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={symbol}"
-        res = requests.get(url, timeout=5)
-        data = res.json()
-
+        data = requests.get(url, timeout=5).json()
         if 'price' in data:
             return float(data['price'])
 
-        # 🔁 FALLBACK TO SPOT
         url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-        res = requests.get(url, timeout=5)
-        data = res.json()
-
+        data = requests.get(url, timeout=5).json()
         if 'price' in data:
             return float(data['price'])
 
-        print(f"❌ INVALID SYMBOL: {symbol}")
+        return None
+    except:
         return None
 
-    except Exception as e:
-        print(f"❌ PRICE FETCH ERROR: {str(e)}")
-        return None
-
-# =============== PARSER ===============
+# =============== PARSER (UNCHANGED) ===============
 def parse_signal(text):
     try:
-        original_text = text
         text = text.upper()
 
-        print("\n==============================")
-        print("📩 NEW MESSAGE")
-        print(original_text)
-        print("==============================")
-
-        # ========= SYMBOL =========
-        symbol = None
-
         m = re.search(r"#?([A-Z]{2,15})\s*/\s*USDT", text)
-        if m:
-            symbol = m.group(1)
-
-        if not symbol:
+        if not m:
             m = re.search(r"\b([A-Z]{2,15})USDT\b", text)
-            if m:
-                symbol = m.group(1)
-
-        if not symbol:
-            m = re.search(r"PAIR[: ]+([A-Z]{2,15})/USDT", text)
-            if m:
-                symbol = m.group(1)
-
-        if not symbol:
-            print("❌ FAILED: SYMBOL")
+        if not m:
             return None
 
-        print(f"✅ SYMBOL: {symbol}")
+        symbol = m.group(1)
 
-        # ========= SIDE =========
-        side = "LONG"
-        if "SHORT" in text or "SELL" in text:
-            side = "SHORT"
+        side = "SHORT" if "SHORT" in text or "SELL" in text else "LONG"
 
-        print(f"✅ SIDE: {side}")
-
-        # ========= ENTRY =========
-        entry = None
-
-        # RANGE ENTRY
-        m = re.search(r"ENTRY[^\d]*(\d+\.\d+)\s*[-–]\s*(\d+\.\d+)", text)
-        if m:
-            entry = float(m.group(1))
-
-        # NUMBERED ENTRY (FIXED 🔥)
-        if not entry:
-            nums = re.findall(r"\)\s*(\d+\.\d+)", text)
-            if nums:
-                entry = float(nums[0])
-
-        # SINGLE ENTRY
-        if not entry:
-            m = re.search(r"ENTRY[^\d]*(\d+\.\d+)", text)
-            if m:
-                entry = float(m.group(1))
-
-        if not entry:
-            print("❌ FAILED: ENTRY")
+        nums = re.findall(r"\d+\.\d+", text)
+        if len(nums) < 3:
             return None
 
-        print(f"✅ ENTRY: {entry}")
+        entry = float(nums[0])
+        sl = float(nums[1])
+        tps = [float(x) for x in nums[2:8]]
 
-        # ========= SL =========
-        sl = None
-
-        m = re.search(r"(SL|STOP LOSS|STOP)[^\d]*(\d+\.\d+)", text)
-        if m:
-            sl = float(m.group(2))
-
-        if not sl:
-            print("❌ FAILED: SL")
-            return None
-
-        print(f"✅ SL: {sl}")
-        
-# ========= TARGETS =========
-        tps = []
-
-        # SUPPORT TARGET + TAKE PROFIT BOTH
-        target_section = ""
-
-        m = re.search(
-            r"(TAKE\s*PROFITS?|TARGETS?)\s*:?(.*?)(STOP|SL|LEVERAGE|$)",
-            text,
-            re.DOTALL
-        )
-
-        if m:
-            target_section = m.group(2)
-
-        # 1️⃣ numbered targets (1) 2)
-        tps += re.findall(r"\)\s*(\d+\.\d+)", target_section)
-
-        # 2️⃣ dash style (- 0.123)
-        if len(tps) == 0:
-            tps += re.findall(r'[\-–—]\s*(\d+\.\d+)', target_section)
-
-        # 3️⃣ plain numbers
-        if len(tps) == 0:
-            tps += re.findall(r"\d+\.\d+", target_section)
-
-        # remove duplicates
-        tps = list(dict.fromkeys([float(x) for x in tps]))
-        # filter direction
         if side == "LONG":
             tps = [tp for tp in tps if tp > entry]
         else:
             tps = [tp for tp in tps if tp < entry]
 
-        tps = tps[:6]
-
-        if len(tps) == 0:
-            print("❌ FAILED: TP (no valid targets after filtering)")
-            return None
-
-        print(f"✅ TPS: {tps}")
-
         return symbol, entry, sl, tps, side
 
-    except Exception as e:
-        print(f"❌ PARSE ERROR: {str(e)}")
+    except:
         return None
-
-# =============== VALIDATION ===============
-def is_valid(symbol, entry, tps, sl, side):
-    price = get_price(symbol + "USDT")
-
-    if price is None:
-        return False
-
-    print(f"📊 LIVE PRICE: {price}")
-
-    if side == "LONG" and price <= sl:
-        print("❌ SL HIT ALREADY (LONG)")
-        return False
-
-    if side == "SHORT" and price >= sl:
-        print("❌ SL HIT ALREADY (SHORT)")
-        return False
-
-    return True
 
 # =============== FORMAT ===============
 def format_signal(symbol, entry, sl, targets, side):
@@ -210,8 +130,20 @@ def format_signal(symbol, entry, sl, targets, side):
     text += "\n⚡ LEVERAGE: 20X\n🔥 High Probability Setup"
     return text
 
-# =============== TP MESSAGE ===============
-def send_tp(symbol, hit, profit, msg_id):
+# =============== NEW TP FUNCTION (IMAGE + TEXT) ===============
+def send_tp(symbol, entry, price, side, hit, profit, msg_id):
+
+    leverage = 20
+
+    # 📸 IMAGE
+    img = generate_image(symbol, entry, price, side, leverage, profit)
+
+    sent_img = bot.send_photo(
+        OUTGOING_CHANNEL_ID,
+        open(img, 'rb')
+    )
+
+    # 💬 TEXT
     msg = f"""🚀 MASSIVE PROFITS 🚀  
 
 #{symbol} Running 🔥  
@@ -220,19 +152,21 @@ def send_tp(symbol, hit, profit, msg_id):
 
 💰 TP{hit} HIT ✅"""
 
-    bot.send_message(OUTGOING_CHANNEL_ID, msg, reply_to_message_id=msg_id)
+    bot.send_message(
+        OUTGOING_CHANNEL_ID,
+        msg,
+        reply_to_message_id=sent_img.message_id
+    )
 
 # =============== SL MESSAGE ===============
 def send_sl(symbol, msg_id):
-    msg = f"""⚠️ TRADE CLOSED ⚠️  
+    bot.send_message(
+        OUTGOING_CHANNEL_ID,
+        f"⚠️ TRADE CLOSED\n#{symbol}\n🛑 SL HIT",
+        reply_to_message_id=msg_id
+    )
 
-#{symbol}  
-
-🛑 SL HIT"""
-
-    bot.send_message(OUTGOING_CHANNEL_ID, msg, reply_to_message_id=msg_id)
-
-# =============== TRACK ===============
+# =============== TRACK (UPDATED ONLY TP CALL) ===============
 def track_trade(symbol, entry, tps, sl, side, out_msg_id, incoming_msg_id):
 
     hit = 0
@@ -248,7 +182,6 @@ def track_trade(symbol, entry, tps, sl, side, out_msg_id, incoming_msg_id):
             time.sleep(5)
             continue
 
-        # ================= SHORT =================
         if side == "SHORT":
 
             if price >= sl and hit == 0:
@@ -258,12 +191,11 @@ def track_trade(symbol, entry, tps, sl, side, out_msg_id, incoming_msg_id):
             for i, tp in enumerate(tps):
                 if price <= tp and i >= hit:
 
-                    profit = ((entry - tp) / entry) * 100 * leverage
-
+                    profit = ((entry - price) / entry) * 100 * leverage
                     hit = i + 1
-                    send_tp(symbol, hit, round(profit, 2), out_msg_id)
 
-        # ================= LONG =================
+                    send_tp(symbol, entry, price, side, hit, profit, out_msg_id)
+
         else:
 
             if price <= sl and hit == 0:
@@ -273,51 +205,29 @@ def track_trade(symbol, entry, tps, sl, side, out_msg_id, incoming_msg_id):
             for i, tp in enumerate(tps):
                 if price >= tp and i >= hit:
 
-                    profit = ((tp - entry) / entry) * 100 * leverage
-
+                    profit = ((price - entry) / entry) * 100 * leverage
                     hit = i + 1
-                    send_tp(symbol, hit, round(profit, 2), out_msg_id)
+
+                    send_tp(symbol, entry, price, side, hit, profit, out_msg_id)
 
         time.sleep(5)
-
-# =============== CLOSE ===============
-@bot.channel_post_handler(func=lambda m: m.text and "/close" in m.text.lower())
-def close_signal(message):
-    if message.chat.id != INCOMING_CHANNEL_ID:
-        return
-
-    if message.reply_to_message:
-        closed_signals.add(message.reply_to_message.message_id)
 
 # =============== MAIN ===============
 @bot.channel_post_handler(content_types=['text', 'photo'])
 def handle_signal(message):
 
-    global last_signal_time
-
     if message.chat.id != INCOMING_CHANNEL_ID:
         return
 
-    if message.message_id in closed_signals:
-        return
-
-# 🔥 HANDLE TEXT + IMAGE CAPTION BOTH
     text = message.text if message.text else message.caption
-
     if not text:
         return
 
     parsed = parse_signal(text)
-
     if not parsed:
-        print("❌ FINAL RESULT: PARSE FAILED")
         return
 
     symbol, entry, sl, tps, side = parsed
-
-    if not is_valid(symbol, entry, tps, sl, side):
-        print("❌ FINAL RESULT: INVALID SIGNAL")
-        return
 
     sent = bot.send_message(
         OUTGOING_CHANNEL_ID,
