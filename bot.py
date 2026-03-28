@@ -246,10 +246,10 @@ def handle_signal(message):
 
     symbol, entry, sl, tps, side = parsed
     
-    # ===== FILTER: Skip if already TP3 hit =====
+  # ===== FILTER: Skip if already TP3 hit =====
 price = get_price(symbol + "USDT")
 
-    if price is not None and len(tps) >= 3:
+if price is not None and len(tps) >= 3:
     tp3 = tps[2]
 
     if side == "LONG" and price >= tp3:
