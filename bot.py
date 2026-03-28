@@ -135,7 +135,6 @@ def send_tp(symbol, entry, price, side, hit, profit, msg_id):
 
     leverage = 20
 
-    # 📸 IMAGE
     img = generate_image(symbol, entry, price, side, leverage, profit)
 
     sent_img = bot.send_photo(
@@ -143,21 +142,15 @@ def send_tp(symbol, entry, price, side, hit, profit, msg_id):
         open(img, 'rb')
     )
 
-    # 💬 TEXT
     msg = f"""🚀 MASSIVE PROFITS 🚀  
-
-#{symbol} Running 🔥  
-
-{round(profit,2)}%+ Profit 📈  
-
-💰 TP{hit} HIT ✅"""
+    ...
+    """
 
     bot.send_message(
         OUTGOING_CHANNEL_ID,
         msg,
-        reply_to_message_id=sent_img.message_id
+        reply_to_message_id=sent_img.message_id   # ❌ THIS LINE CAUSING ISSUE
     )
-
 # =============== SL MESSAGE ===============
 def send_sl(symbol, msg_id):
     bot.send_message(
