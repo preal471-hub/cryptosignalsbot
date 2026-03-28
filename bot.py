@@ -245,21 +245,22 @@ def handle_signal(message):
         return
 
     symbol, entry, sl, tps, side = parsed
-    
-  # ===== FILTER: Skip if already TP3 hit =====
-price = get_price(symbol + "USDT")
 
-if price is not None and len(tps) >= 3:
-    tp3 = tps[2]
+    # ===== FILTER: Skip if already TP3 hit =====
+    price = get_price(symbol + "USDT")
 
-    if side == "LONG" and price >= tp3:
-        print(f"❌ Skipped {symbol} (already TP3 hit)")
-        return
+    if price is not None and len(tps) >= 3:
+        tp3 = tps[2]
 
-    if side == "SHORT" and price <= tp3:
-        print(f"❌ Skipped {symbol} (already TP3 hit)")
-        return
+        if side == "LONG" and price >= tp3:
+            print(f"❌ Skipped {symbol} (already TP3 hit)")
+            return
 
+        if side == "SHORT" and price <= tp3:
+            print(f"❌ Skipped {symbol} (already TP3 hit)")
+            return
+
+    # ✅ only fresh signals go आगे
     sent = bot.send_message(
         OUTGOING_CHANNEL_ID,
         format_signal(symbol, entry, sl, tps, side)
