@@ -23,7 +23,7 @@ def generate_image(symbol, entry, last, side, leverage, pnl):
     img = Image.open("template.png").convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    now = datetime.now().strftime("%b %d, %Y | %I:%M %p")
+    now = datetime.now().strftime("%b %d, %Y")
     username = "BluepeakCryptoTrading"
 
     font_username = ImageFont.truetype("Montserrat-Bold.ttf", 40)
