@@ -182,36 +182,53 @@ def track_trade(symbol, entry, tps, sl, side, out_msg_id, incoming_msg_id):
             time.sleep(5)
             continue
 
+        # ================= SHORT =================
         if side == "SHORT":
 
+            # SL HIT
             if price >= sl and hit == 0:
                 send_sl(symbol, out_msg_id)
                 break
 
             for i, tp in enumerate(tps):
-                if price <= tp and i >= hit:
 
-                    profit = ((entry - price) / entry) * 100 * leverage
+                # ❗ avoid duplicate TP
+                if i < hit:
+                    continue
+
+                if price <= tp:
+
+                    tp_price = tp  # ✅ FIX: use exact TP price
+
+                    profit = ((entry - tp_price) / entry) * 100 * leverage
                     hit = i + 1
 
-                    send_tp(symbol, entry, price, side, hit, profit, out_msg_id)
+                    send_tp(symbol, entry, tp_price, side, hit, profit, out_msg_id)
 
+        # ================= LONG =================
         else:
 
+            # SL HIT
             if price <= sl and hit == 0:
                 send_sl(symbol, out_msg_id)
                 break
 
             for i, tp in enumerate(tps):
-                if price >= tp and i >= hit:
 
-                    profit = ((price - entry) / entry) * 100 * leverage
+                # ❗ avoid duplicate TP
+                if i < hit:
+                    continue
+
+                if price >= tp:
+
+                    tp_price = tp  # ✅ FIX: use exact TP price
+
+                    profit = ((tp_price - entry) / entry) * 100 * leverage
                     hit = i + 1
 
-                    send_tp(symbol, entry, price, side, hit, profit, out_msg_id)
+                    send_tp(symbol, entry, tp_price, side, hit, profit, out_msg_id)
 
         time.sleep(5)
-
 # =============== MAIN ===============
 @bot.channel_post_handler(content_types=['text', 'photo'])
 def handle_signal(message):
